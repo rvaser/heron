@@ -9,6 +9,8 @@
 #include "bioparser/fastq_parser.hpp"
 #include "biosoup/nucleic_acid.hpp"
 #include "biosoup/timer.hpp"
+#include "edlib.h"  // NOLINT
+#include "ram/minimizer_engine.hpp"
 #include "thread_pool/thread_pool.hpp"
 
 std::atomic<std::uint32_t> biosoup::NucleicAcid::num_objects{0};
@@ -109,9 +111,118 @@ int main(int argc, char** argv) {
   biosoup::Timer timer{};
   timer.Start();
 
-  auto thread_pool = std::make_shared<thread_pool::ThreadPool>(num_threads);
-
   auto sequences = sparser->Parse(-1);
+
+  std::cerr << "[heron::] parsed " << sequences.size() << " sequences "
+            << std::fixed << timer.Stop() << "s"
+            << std::endl;
+
+  struct Pile {
+    std::uint8_t a;
+    std::uint8_t c;
+    std::uint8_t g;
+    std::uint8_t t;
+  };
+
+  std::vector<std::vector<Pile>> piles(sequences.size());
+  for (const auto& it : sequences) {
+    piles[it->id].resize(it->inflated_len);
+  }
+
+  auto thread_pool = std::make_shared<thread_pool::ThreadPool>(num_threads);
+  ram::MinimizerEngine minimizer_engine{thread_pool, 15U, 5U};
+
+  std::size_t bytes = 0;
+  for (std::uint32_t i = 0, j = 0; i < sequences.size(); ++i) {
+    bytes += sequences[i]->inflated_len;
+    if (i != sequences.size() - 1 && bytes < (1ULL << 32)) {
+      continue;
+    }
+    bytes = 0;
+
+    timer.Start();
+
+    minimizer_engine.Minimize(
+        sequences.begin() + j,
+        sequences.begin() + i + 1,
+        true);
+    minimizer_engine.Filter(0.001);
+
+    std::cerr << "[heron::] minimized "
+              << j << " - " << i + 1 << " / " << sequences.size() << " "
+              << std::fixed << timer.Stop() << "s"
+              << std::endl;
+
+    timer.Start();
+
+    std::vector<std::future<void>> futures;
+    for (std::uint32_t k = 0; k < i + 1; ++k) {
+      futures.emplace_back(thread_pool->Submit(
+          [&] (std::uint32_t i) -> void {
+            auto overlaps = minimizer_engine.Map(sequences[i], true, false, true);  // NOLINT
+
+            for (const auto& it : overlaps) {
+              auto lhs = sequences[i]->InflateData(
+                  it.lhs_begin,
+                  it.lhs_end - it.lhs_begin);
+              biosoup::NucleicAcid rhs_{"", sequences[it.rhs_id]->InflateData(
+                  it.rhs_begin,
+                  it.rhs_end - it.rhs_begin)};
+              if (!it.strand) {
+                rhs_.ReverseAndComplement();
+              }
+              auto rhs = rhs_.InflateData();
+
+              EdlibAlignResult result = edlibAlign(
+                  lhs.c_str(), lhs.size(),
+                  rhs.c_str(), rhs.size(),
+                  edlibNewAlignConfig(-1, EDLIB_MODE_NW, EDLIB_TASK_PATH, nullptr, 0));  // NOLINT
+              if (result.status == EDLIB_STATUS_OK) {
+                std::uint32_t lhs_pos = it.lhs_begin;
+                std::uint32_t rhs_pos = 0;
+                for (int j = 0; j < result.alignmentLength; ++j) {
+                  switch (result.alignment[j]) {
+                    case 0:
+                    case 3: {
+                      switch (rhs[rhs_pos]) {
+                        case 'A': ++piles[i][lhs_pos].a; break;
+                        case 'C': ++piles[i][lhs_pos].c; break;
+                        case 'G': ++piles[i][lhs_pos].g; break;
+                        case 'T': ++piles[i][lhs_pos].t; break;
+                        default: break;
+                      }
+                      ++lhs_pos;
+                      ++rhs_pos;
+                      break;
+                    }
+                    case 1: ++lhs_pos; break;
+                    case 2: ++rhs_pos; break;
+                    default: break;
+                  }
+                }
+              }
+              edlibFreeAlignResult(result);
+            }
+          },
+          k));
+
+      bytes += sequences[k]->inflated_len;
+      if (k != i && bytes < (1U << 30)) {
+        continue;
+      }
+      bytes = 0;
+
+      for (const auto& it : futures) {
+        it.wait();
+      }
+    }
+
+    std::cerr << "[heron::] mapped sequences "
+              << std::fixed << timer.Stop() << "s"
+              << std::endl;
+
+    j = i + 1;
+  }
 
   timer.Stop();
   std::cerr << "[heron::] " << std::fixed << timer.elapsed_time() << "s"

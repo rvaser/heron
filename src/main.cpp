@@ -225,6 +225,39 @@ int main(int argc, char** argv) {
   }
 
   timer.Stop();
+
+  timer.Start();
+
+  std::size_t zeros = 0, predictable = 0, total = 0, snps = 0, solid = 0;
+  for (const auto& it : piles) {
+    total += it.size();
+    for (const auto& jt : it) {
+      std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t };
+      double sum = std::accumulate(counts.begin(), counts.end(), 0.);
+      if (sum == 0.) {
+        ++zeros;
+      } else if (sum > 9.) {
+        ++predictable;
+        std::sort(counts.begin(), counts.end());
+        if (counts[0] / sum > 0.5 && counts[1] / sum > 0.25) {
+          ++snps;
+        } else if (counts[0] / sum > 0.75) {
+          ++solid;
+        }
+      }
+    }
+  }
+
+  std::cerr << "[heron::] num bases = " << total << std::endl;
+  std::cerr << "[heron::] num bad bases = " << zeros << std::endl;
+  std::cerr << "[heron::] num predictable bases = " << predictable << std::endl;
+  std::cerr << "[heron::] num solid = " << solid << std::endl;
+  std::cerr << "[heron::] num snps = " << snps << std::endl;
+
+  std::cerr << "[heron::] calculated statistics "
+            << std::fixed << timer.Stop() << "s"
+            << std::endl;
+
   std::cerr << "[heron::] " << std::fixed << timer.elapsed_time() << "s"
             << std::endl;
 

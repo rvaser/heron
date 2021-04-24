@@ -239,9 +239,9 @@ int main(int argc, char** argv) {
       } else if (sum > 9.) {
         ++predictable;
         std::sort(counts.begin(), counts.end());
-        if (counts[0] / sum > 0.5 && counts[1] / sum > 0.25) {
+        if (counts[3] / sum > 0.5 && counts[2] / sum > 0.25) {
           ++snps;
-        } else if (counts[0] / sum > 0.75) {
+        } else if (counts[3] / sum > 0.75) {
           ++solid;
         }
       }

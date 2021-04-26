@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
     std::uint8_t c;
     std::uint8_t g;
     std::uint8_t t;
+    std::uint8_t i;
   };
 
   std::vector<std::vector<Pile>> piles(sequences.size());
@@ -195,8 +196,15 @@ int main(int argc, char** argv) {
                       ++rhs_pos;
                       break;
                     }
-                    case 1: ++lhs_pos; break;
-                    case 2: ++rhs_pos; break;
+                    case 1: {
+                      ++piles[i][lhs_pos].i;
+                      ++lhs_pos;
+                      break;
+                    }
+                    case 2: {
+                      ++rhs_pos;
+                      break;
+                    }
                     default: break;
                   }
                 }
@@ -229,18 +237,20 @@ int main(int argc, char** argv) {
   timer.Start();
 
   std::size_t zeros = 0, predictable = 0, total = 0, snps = 0, solid = 0;
+  double indels = 0;
   for (const auto& it : piles) {
     total += it.size();
     for (const auto& jt : it) {
       std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t };
-      double sum = std::accumulate(counts.begin(), counts.end(), 0.);
+      double sum = std::accumulate(counts.begin(), counts.end(), jt.i);
       if (sum == 0.) {
         ++zeros;
-      } else if (sum > 9.) {
+      } else if (sum > 14.) {
         ++predictable;
         std::sort(counts.begin(), counts.end());
         if (counts[3] / sum > 0.5 && counts[2] / sum > 0.25) {
           ++snps;
+          indels += jt.i / sum;
         } else if (counts[3] / sum > 0.75) {
           ++solid;
         }
@@ -253,6 +263,7 @@ int main(int argc, char** argv) {
   std::cerr << "[heron::] num predictable bases = " << predictable << std::endl;
   std::cerr << "[heron::] num solid = " << solid << std::endl;
   std::cerr << "[heron::] num snps = " << snps << std::endl;
+  std::cerr << "[heron::]   indel ratio = " << indels / snps << std::endl;
 
   std::cerr << "[heron::] calculated statistics "
             << std::fixed << timer.Stop() << "s"

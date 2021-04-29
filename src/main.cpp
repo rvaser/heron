@@ -238,8 +238,11 @@ int main(int argc, char** argv) {
 
   std::size_t zeros = 0, predictable = 0, total = 0, snps = 0, solid = 0;
   double indels = 0;
+  std::vector<std::vector<std::uint32_t>> rsnps(piles.size());
+  std::size_t i = 0;
   for (const auto& it : piles) {
     total += it.size();
+    std::size_t j = 0;
     for (const auto& jt : it) {
       std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t };
       double sum = std::accumulate(counts.begin(), counts.end(), jt.i);
@@ -249,13 +252,16 @@ int main(int argc, char** argv) {
         ++predictable;
         std::sort(counts.begin(), counts.end());
         if (counts[3] / sum > 0.5 && counts[2] / sum > 0.25) {
+          rsnps[i].emplace_back(j);
           ++snps;
           indels += jt.i / sum;
         } else if (counts[3] / sum > 0.75) {
           ++solid;
         }
       }
+      ++j;
     }
+    ++i;
   }
 
   std::cerr << "[heron::] num bases = " << total << std::endl;
@@ -268,6 +274,17 @@ int main(int argc, char** argv) {
   std::cerr << "[heron::] calculated statistics "
             << std::fixed << timer.Stop() << "s"
             << std::endl;
+
+  for (std::uint32_t i = 0; i < rsnps.size(); ++i) {
+    if (rsnps[i].empty()) {
+      continue;
+    }
+    std::cout << i;
+    for (const auto& jt : rsnps[i]) {
+      std::cout << " " << jt;
+    }
+    std::cout << std::endl;
+  }
 
   std::cerr << "[heron::] " << std::fixed << timer.elapsed_time() << "s"
             << std::endl;

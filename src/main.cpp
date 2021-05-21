@@ -237,7 +237,6 @@ int main(int argc, char** argv) {
   timer.Start();
 
   std::size_t zeros = 0, predictable = 0, total = 0, snps = 0, solid = 0;
-  double indels = 0;
   std::vector<std::vector<std::uint32_t>> rsnps(piles.size());
   std::size_t i = 0;
   for (const auto& it : piles) {
@@ -248,14 +247,18 @@ int main(int argc, char** argv) {
       double sum = std::accumulate(counts.begin(), counts.end(), jt.i);
       if (sum == 0.) {
         ++zeros;
-      } else if (sum > 14.) {
+      } else if (sum > 7.) {
         ++predictable;
-        std::sort(counts.begin(), counts.end());
-        if (counts[3] / sum > 0.5 && counts[2] / sum > 0.25) {
+        std::size_t variants = 0;
+        for (const auto& it : counts) {
+          if (it > 3) {
+            ++variants;
+          }
+        }
+        if (variants > 1) {
           rsnps[i].emplace_back(j);
           ++snps;
-          indels += jt.i / sum;
-        } else if (counts[3] / sum > 0.75) {
+        } else {
           ++solid;
         }
       }
@@ -269,7 +272,6 @@ int main(int argc, char** argv) {
   std::cerr << "[heron::] num predictable bases = " << predictable << std::endl;
   std::cerr << "[heron::] num solid = " << solid << std::endl;
   std::cerr << "[heron::] num snps = " << snps << std::endl;
-  std::cerr << "[heron::]   indel ratio = " << indels / snps << std::endl;
 
   std::cerr << "[heron::] calculated statistics "
             << std::fixed << timer.Stop() << "s"

@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
   }
 
   auto thread_pool = std::make_shared<thread_pool::ThreadPool>(num_threads);
-  ram::MinimizerEngine minimizer_engine{thread_pool, 15U, 5U};
+  ram::MinimizerEngine minimizer_engine{thread_pool, 29U, 9U};
 
   std::size_t bytes = 0;
   for (std::uint32_t i = 0, j = 0; i < sequences.size(); ++i) {
@@ -163,6 +163,9 @@ int main(int argc, char** argv) {
             auto overlaps = minimizer_engine.Map(sequences[i], true, false, true);  // NOLINT
 
             for (const auto& it : overlaps) {
+              if (it.score > 999) {
+                continue;
+              }
               auto lhs = sequences[i]->InflateData(
                   it.lhs_begin,
                   it.lhs_end - it.lhs_begin);
@@ -178,7 +181,8 @@ int main(int argc, char** argv) {
                   lhs.c_str(), lhs.size(),
                   rhs.c_str(), rhs.size(),
                   edlibNewAlignConfig(-1, EDLIB_MODE_NW, EDLIB_TASK_PATH, nullptr, 0));  // NOLINT
-              if (result.status == EDLIB_STATUS_OK) {
+              if (result.status == EDLIB_STATUS_OK &&
+                  result.editDistance / static_cast<double>(std::max(it.lhs_end - it.lhs_begin, it.rhs_end - it.rhs_begin)) < 0.02) {  // NOLINT
                 std::uint32_t lhs_pos = it.lhs_begin;
                 std::uint32_t rhs_pos = 0;
                 for (int j = 0; j < result.alignmentLength; ++j) {
@@ -225,68 +229,50 @@ int main(int argc, char** argv) {
       }
     }
 
-    std::cerr << "[heron::] mapped sequences "
+    std::cerr << "[heron::] aligned sequences "
               << std::fixed << timer.Stop() << "s"
               << std::endl;
 
     j = i + 1;
   }
 
-  timer.Stop();
-
   timer.Start();
 
-  std::size_t zeros = 0, predictable = 0, total = 0, snps = 0, solid = 0;
-  std::vector<std::vector<std::uint32_t>> rsnps(piles.size());
   std::size_t i = 0;
   for (const auto& it : piles) {
-    total += it.size();
-    std::size_t j = 0;
+    std::string corrected = "";
     for (const auto& jt : it) {
-      std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t };
-      double sum = std::accumulate(counts.begin(), counts.end(), jt.i);
-      if (sum == 0.) {
-        ++zeros;
-      } else if (sum > 7.) {
-        ++predictable;
-        std::size_t variants = 0;
-        for (const auto& it : counts) {
-          if (it > 3) {
-            ++variants;
-          }
-        }
-        if (variants > 1) {
-          rsnps[i].emplace_back(j);
-          ++snps;
-        } else {
-          ++solid;
+      std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t, jt.i };
+      if (std::accumulate(counts.begin(), counts.end(), 0) < 4) {
+        continue;
+      }
+      std::size_t m = 0;
+      for (std::size_t k = 1; k < counts.size(); ++k) {
+        if (counts[m] < counts[k]) {
+          m = k;
         }
       }
-      ++j;
+      switch (m) {
+        case 0: corrected += 'A'; break;
+        case 1: corrected += 'C'; break;
+        case 2: corrected += 'G'; break;
+        case 3: corrected += 'T'; break;
+        case 4: break;
+        default: break;
+      }
     }
+
+    if (!corrected.empty()) {
+      std::cout << ">" << sequences[i]->name << std::endl
+                << corrected << std::endl;
+    }
+
     ++i;
   }
 
-  std::cerr << "[heron::] num bases = " << total << std::endl;
-  std::cerr << "[heron::] num bad bases = " << zeros << std::endl;
-  std::cerr << "[heron::] num predictable bases = " << predictable << std::endl;
-  std::cerr << "[heron::] num solid = " << solid << std::endl;
-  std::cerr << "[heron::] num snps = " << snps << std::endl;
-
-  std::cerr << "[heron::] calculated statistics "
+  std::cerr << "[heron::] corrected reads "
             << std::fixed << timer.Stop() << "s"
             << std::endl;
-
-  for (std::uint32_t i = 0; i < rsnps.size(); ++i) {
-    if (rsnps[i].empty()) {
-      continue;
-    }
-    std::cout << i;
-    for (const auto& jt : rsnps[i]) {
-      std::cout << " " << jt;
-    }
-    std::cout << std::endl;
-  }
 
   std::cerr << "[heron::] " << std::fixed << timer.elapsed_time() << "s"
             << std::endl;

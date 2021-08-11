@@ -364,7 +364,12 @@ int main(int argc, char** argv) {
     total += it.size();
     std::size_t j = 0;
     for (const auto& jt : it) {
-      std::vector<std::uint32_t> counts = { jt.a, jt.c, jt.g, jt.t };
+      std::vector<double> counts = {
+          static_cast<double>(jt.a),
+          static_cast<double>(jt.c),
+          static_cast<double>(jt.g),
+          static_cast<double>(jt.t)
+      };
       double sum = std::accumulate(counts.begin(), counts.end(), 0);
       if (use_frequencies) {
         for (auto& kt : counts) {

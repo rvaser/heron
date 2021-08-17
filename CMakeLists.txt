@@ -82,6 +82,24 @@ target_link_libraries(heron
   edlib::edlib
   ram::ram)
 
+add_executable(mutate
+  src/mutate.cpp)
+
+target_link_libraries(mutate
+  bioparser::bioparser
+  biosoup::biosoup)
+
+add_executable(annotate
+  src/annotate.cpp)
+
+target_link_libraries(annotate
+  bioparser::bioparser
+  edlib::edlib
+  ram::ram)
+
+add_executable(evaluate
+  src/evaluate.cpp)
+
 target_compile_definitions(heron PRIVATE VERSION="${PROJECT_VERSION}")
 
 install(TARGETS heron DESTINATION ${CMAKE_INSTALL_BINDIR})

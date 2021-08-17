@@ -20,6 +20,9 @@ std::atomic<std::uint32_t> biosoup::NucleicAcid::num_objects{0};
 namespace {
 
 static struct option options[] = {
+  {"coverage", required_argument, nullptr, 'c'},
+  {"low", required_argument, nullptr, 'L'},
+  {"high", required_argument, nullptr, 'H'},
   {"frequencies", no_argument, nullptr, 'f'},
   {"ksw2", no_argument, nullptr, 'k'},
   {"threads", required_argument, nullptr, 't'},
@@ -72,8 +75,17 @@ void Help() {
       "    input file in FASTA/FASTQ format (can be compressed with gzip)\n"
       "\n"
       "  options:\n"
+      "    --coverage <int>\n"
+      "      default: 3\n"
+      "      declare solid base with coverage greater than provided value\n"
+      "    --low <double>\n"
+      "      default: 0.333\n"
+      "      declare solid base with frequency greater than provided value\n"
+      "    --high <double>\n"
+      "      default: 0.666\n"
+      "      declare solid base with frequency less than provided value\n"
       "    -f, --frequencies\n"
-      "      default: counts\n"
+      "      default: \n"
       "      technique to detect variants\n"
       "    -k, --ksw2\n"
       "      default: edlib\n"
@@ -90,6 +102,10 @@ void Help() {
 }  // namespace
 
 int main(int argc, char** argv) {
+  std::uint32_t coverage = 3;
+  double low = 0.333;
+  double high = 0.666;
+
   bool use_frequencies = false;
   bool use_ksw2 = false;
   std::uint32_t num_threads = 1;
@@ -98,9 +114,12 @@ int main(int argc, char** argv) {
   int arg;
   while ((arg = getopt_long(argc, argv, optstr.c_str(), options, nullptr)) != -1) {  // NOLINT
     switch (arg) {
+      case 'c': coverage = std::atoi(optarg); break;
+      case 'L': low = std::atof(optarg); break;
+      case 'H': high = std::atof(optarg); break;
       case 'f': use_frequencies = true; break;
       case 'k': use_ksw2 = true; break;
-      case 't': num_threads = atoi(optarg); break;
+      case 't': num_threads = std::atoi(optarg); break;
       case 'v': std::cout << VERSION << std::endl; return 0;
       case 'h': Help(); return 0;
       default: return 1;
@@ -125,18 +144,24 @@ int main(int argc, char** argv) {
   biosoup::Timer timer{};
   timer.Start();
 
-  auto sequences = sparser->Parse(-1);
+  std::vector<std::unique_ptr<biosoup::NucleicAcid>> sequences;
+  try {
+    sequences = sparser->Parse(-1);
+  } catch (const std::invalid_argument& exception) {
+    std::cerr << exception.what() << std::endl;
+    return 1;
+  }
 
   std::cerr << "[heron::] parsed " << sequences.size() << " sequences "
             << std::fixed << timer.Stop() << "s"
             << std::endl;
 
   struct Pile {
-    std::uint8_t a;
-    std::uint8_t c;
-    std::uint8_t g;
-    std::uint8_t t;
-    std::uint8_t i;
+    std::uint32_t a;
+    std::uint32_t c;
+    std::uint32_t g;
+    std::uint32_t t;
+    std::uint32_t i;
   };
 
   std::vector<std::vector<Pile>> piles(sequences.size());
@@ -237,7 +262,7 @@ int main(int argc, char** argv) {
         mn,  // const int8_t *mat
         g,  // int8_t gapo
         e,  // int8_t gape
-        -1,  // int w
+        500,  // int w
         &m_cigar,  // int *m_cigar_
         &n_cigar,  // int *n_cigar_
         &cigar);  // uint32_t **cigar_
@@ -383,11 +408,11 @@ int main(int argc, char** argv) {
         std::size_t variants = 0;
         for (const auto& it : counts) {
           if (use_frequencies) {
-            if (0.333 < it && it < 0.666) {
+            if (low < it && it < high) {
               ++variants;
             }
           } else {
-            if (it > 3) {
+            if (it > coverage) {
               ++variants;
             }
           }

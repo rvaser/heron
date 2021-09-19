@@ -387,6 +387,15 @@ int main(int argc, char** argv) {
   std::size_t i = 0;
   for (const auto& it : piles) {
     total += it.size();
+
+    std::vector<std::uint32_t> cov;
+    cov.reserve(it.size());
+    for (const auto& jt : it) {
+      cov.emplace_back(jt.a + jt.c + jt.g + jt.t);
+    }
+    std::nth_element(cov.begin(), cov.begin() + cov.size() / 2, cov.end());
+    double m = cov[cov.size() / 2] * 2. / 3.;
+
     std::size_t j = 0;
     for (const auto& jt : it) {
       std::vector<double> counts = {
@@ -403,7 +412,7 @@ int main(int argc, char** argv) {
       }
       if (sum == 0.) {
         ++zeros;
-      } else if (sum > 7.) {
+      } else if (sum > m) {
         ++predictable;
         std::size_t variants = 0;
         for (const auto& it : counts) {

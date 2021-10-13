@@ -89,6 +89,14 @@ target_link_libraries(mutate
   bioparser::bioparser
   biosoup::biosoup)
 
+add_executable(analyze
+  src/analyze.cpp)
+
+target_link_libraries(analyze
+  bioparser::bioparser
+  edlib::edlib
+  ram::ram)
+
 add_executable(annotate
   src/annotate.cpp)
 
